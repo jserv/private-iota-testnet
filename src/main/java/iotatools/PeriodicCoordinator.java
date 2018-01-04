@@ -1,15 +1,11 @@
 package iotatools;
 
 import jota.IotaAPI;
-import jota.dto.response.FindTransactionResponse;
-import jota.dto.response.GetInclusionStateResponse;
 import jota.dto.response.GetNodeInfoResponse;
 import jota.dto.response.GetTransactionsToApproveResponse;
 import jota.model.Transaction;
 import org.apache.commons.cli.*;
 
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -43,24 +39,30 @@ public class PeriodicCoordinator {
             public void run() {
                 try {
                     GetNodeInfoResponse nodeInfo = api.getNodeInfo();
+                    String latestSolidSubtangleMilestone = nodeInfo.getLatestSolidSubtangleMilestone();
                     int updatedMilestone = nodeInfo.getLatestMilestoneIndex() + 1;
                     if (nodeInfo.getLatestMilestone().equals(NULL_HASH)) {
                         newMilestone(api, NULL_HASH, NULL_HASH, updatedMilestone);
                     } else {
-                        GetTransactionsToApproveResponse x = api.getTransactionsToApprove(depth);
-                        String trunkTransaction = x.getTrunkTransaction();
-                        String branchTransaction = x.getBranchTransaction();
+                        String trunkTransaction = latestSolidSubtangleMilestone;
+                        String branchTransaction = latestSolidSubtangleMilestone;
                         String trunkReason = "default";
                         String branchReason = "default";
 
+                        GetTransactionsToApproveResponse x = api.getTransactionsToApprove(depth);
+                        if( x != null ) {
+                            trunkTransaction = x.getTrunkTransaction();
+                            branchTransaction = x.getBranchTransaction();
+                            trunkReason = "approval";
+                            branchReason = "approval";
+                        }
+
                         // validate remaining tips
                         String[] tips = api.getTips().getHashes();
-                        if (tips.length > 0) {
-                            trunkTransaction = tips[0];
-                            trunkReason = "tip";
-                        }
-                        if (tips.length > 1) {
-                            branchTransaction = tips[1];
+                        if( tips.length > 0 ) {
+//                            List<Transaction> bundle = api.getBundle(tips[0]).getTransactions();
+//                            branchTransaction = bundle.get(0).getHash();
+                            branchTransaction = tips[0];
                             branchReason = "tip";
                         }
 
@@ -69,30 +71,24 @@ public class PeriodicCoordinator {
                             String[] transactionHashes = api.findTransactions(null, new String[]{referenceTag}, null, null).getHashes();
                             boolean[] inclusionStates = api.getLatestInclusion(transactionHashes).getStates();
 
-                            Boolean isTrunkSet = false;
                             for (int i = 0; i < inclusionStates.length; i++) {
                                 if (inclusionStates[i] == false) {
-                                    if(isTrunkSet == false) {
-                                        trunkTransaction = transactionHashes[i];
-                                        trunkReason = "tag";
-                                        isTrunkSet = true;
-                                    } else {
-                                        branchTransaction = transactionHashes[i];
-                                        branchReason = "tag";
-                                        break;
-                                    }
+                                    branchTransaction = transactionHashes[i];
+                                    branchReason = "tag";
                                 }
                             }
                         }
 
                         // check if milestone is necessary
-                        String latestSolidSubtangleMilestone = nodeInfo.getLatestSolidSubtangleMilestone();
                         if ((branchTransaction.equals(trunkTransaction)) && trunkTransaction.equals(latestSolidSubtangleMilestone)) {
                             logger.info("Skipping milestone");
                         } else {
                             newMilestone(api, trunkTransaction, branchTransaction, updatedMilestone);
-                            logger.info(String.format("New milestone. Approved trunk:%s (reason:%s), branch:%s (reason:%s)",
+                            logger.info(String.format("New milestone. Approved trunk: %s (reason: %s), branch: %s (reason: %s)",
                                     trunkTransaction, trunkReason, branchTransaction, branchReason));
+
+                            // wait for milestone to propagate
+                            Thread.sleep(10000);
                         }
                     }
                 }
