@@ -1,10 +1,16 @@
 package iotatools;
 
 import jota.IotaAPI;
+import jota.dto.response.FindTransactionResponse;
+import jota.dto.response.GetInclusionStateResponse;
 import jota.dto.response.GetNodeInfoResponse;
 import jota.dto.response.GetTransactionsToApproveResponse;
+import jota.model.Transaction;
 import org.apache.commons.cli.*;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -14,6 +20,7 @@ import java.util.logging.Logger;
 import static iotatools.TestnetCoordinator.NULL_HASH;
 import static iotatools.TestnetCoordinator.newMilestone;
 
+@SuppressWarnings("PointlessBooleanExpression")
 public class PeriodicCoordinator {
 
     private final static Logger logger = Logger.getLogger(PeriodicCoordinator.class.getName());
@@ -26,7 +33,9 @@ public class PeriodicCoordinator {
         CommandLine parameter = parseArgs(args);
         String host = parameter.getOptionValue("host", "localhost");
         String port = parameter.getOptionValue("port", "14265");
+        final String referenceTag = parameter.getOptionValue("tag", null);
         final Integer interval = Integer.valueOf(parameter.getOptionValue("interval", "60"));
+        final Integer depth = Integer.valueOf(parameter.getOptionValue("depth", "10"));
         final IotaAPI api = new IotaAPI.Builder().host(host).port(port).build();
 
         Runnable task = new Runnable() {
@@ -38,10 +47,54 @@ public class PeriodicCoordinator {
                     if (nodeInfo.getLatestMilestone().equals(NULL_HASH)) {
                         newMilestone(api, NULL_HASH, NULL_HASH, updatedMilestone);
                     } else {
-                        GetTransactionsToApproveResponse x = api.getTransactionsToApprove(10);
-                        newMilestone(api, x.getTrunkTransaction(), x.getBranchTransaction(), updatedMilestone);
+                        GetTransactionsToApproveResponse x = api.getTransactionsToApprove(depth);
+                        String trunkTransaction = x.getTrunkTransaction();
+                        String branchTransaction = x.getBranchTransaction();
+                        String trunkReason = "default";
+                        String branchReason = "default";
+
+                        // validate remaining tips
+                        String[] tips = api.getTips().getHashes();
+                        if (tips.length > 0) {
+                            trunkTransaction = tips[0];
+                            trunkReason = "tip";
+                        }
+                        if (tips.length > 1) {
+                            branchTransaction = tips[1];
+                            branchReason = "tip";
+                        }
+
+                        // find transaction with reference
+                        if (referenceTag != null) {
+                            String[] transactionHashes = api.findTransactions(null, new String[]{referenceTag}, null, null).getHashes();
+                            boolean[] inclusionStates = api.getLatestInclusion(transactionHashes).getStates();
+
+                            Boolean isTrunkSet = false;
+                            for (int i = 0; i < inclusionStates.length; i++) {
+                                if (inclusionStates[i] == false) {
+                                    if(isTrunkSet == false) {
+                                        trunkTransaction = transactionHashes[i];
+                                        trunkReason = "tag";
+                                        isTrunkSet = true;
+                                    } else {
+                                        branchTransaction = transactionHashes[i];
+                                        branchReason = "tag";
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        // check if milestone is necessary
+                        String latestSolidSubtangleMilestone = nodeInfo.getLatestSolidSubtangleMilestone();
+                        if ((branchTransaction.equals(trunkTransaction)) && trunkTransaction.equals(latestSolidSubtangleMilestone)) {
+                            logger.info("Skipping milestone");
+                        } else {
+                            newMilestone(api, trunkTransaction, branchTransaction, updatedMilestone);
+                            logger.info(String.format("New milestone. Approved trunk:%s (reason:%s), branch:%s (reason:%s)",
+                                    trunkTransaction, trunkReason, branchTransaction, branchReason));
+                        }
                     }
-                    logger.info("New milestone " + updatedMilestone + " created.");
                 }
                 catch (Exception e) {
                     logger.log(Level.SEVERE, e.getLocalizedMessage(), e);
@@ -60,6 +113,8 @@ public class PeriodicCoordinator {
         options.addOption("h", "host", true, "IRI host");
         options.addOption("p", "port", true, "IRI port");
         options.addOption("i", "interval", true, "Interval (seconds) for issuing new milestones");
+        options.addOption("t", "tag", true, "Reference to approve transactions with this tag");
+        options.addOption("d", "depth", true, "Depth to search for tips.");
 
         try {
             CommandLineParser parser = new DefaultParser();
