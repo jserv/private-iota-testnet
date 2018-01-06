@@ -1,0 +1,16 @@
+diff --git a/src/main/java/com/iota/iri/Snapshot.java b/src/main/java/com/iota/iri/Snapshot.java
+index 06c1c9f1..1c3cf19b 100644
+--- a/src/main/java/com/iota/iri/Snapshot.java
++++ b/src/main/java/com/iota/iri/Snapshot.java
+@@ -35,11 +35,6 @@ public class Snapshot {
+     public final ReadWriteLock rwlock = new ReentrantReadWriteLock();
+ 
+     static {
+-
+-        if (!SignedFiles.isFileSignatureValid("/Snapshot.txt", "/Snapshot.sig", SNAPSHOT_PUBKEY, SNAPSHOT_PUBKEY_DEPTH, SNAPSHOT_INDEX)) {
+-            throw new RuntimeException("Snapshot signature failed.");
+-        }
+-
+         InputStream in = Snapshot.class.getResourceAsStream("/Snapshot.txt");
+         BufferedReader reader = new BufferedReader(new InputStreamReader(in));
+         String line;
