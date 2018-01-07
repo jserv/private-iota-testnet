@@ -6,3 +6,6 @@
 
 *.app
 /iri
+/nodes
+*.log
+iri-testnet.jar
