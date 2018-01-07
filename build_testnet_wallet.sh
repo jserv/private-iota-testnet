@@ -9,15 +9,9 @@ pushd wallet
 git clean -fdx
 git checkout tags/v2.5.1
 
-git clone https://github.com/iotaledger/iri
+mkdir -p iri
 
-pushd iri
-
-mvn package
-cp target/iri-*.jar iri-testnet.jar
-
-popd
-
+cp ../iri-*.jar iri/
 cp package.testnet.json package.json
 
 brew update
@@ -31,4 +25,6 @@ npm install
 
 npm run compile:mac
 
-mv out/mac/*.app ..
+mv out/mac/*.app .
+
+rm -rf ~/Library/Application\ Support/IOTA\ Wallet\ Testnet/
