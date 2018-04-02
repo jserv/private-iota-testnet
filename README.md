@@ -14,13 +14,39 @@ This repository contains tools (written in Java) to build your own Snapshot and 
 
 ## Step by step instructions
 
-Get and compile this ([private-iota-testnet](https://github.com/schierlm/private-iota-testnet)) repository
+Get and compile this ([private-iota-testnet](https://github.com/jserv/private-iota-testnet)) repository
 
     mvn package
 
 In case you are on Windows and your build process freezes at that point, this may be caused by a bug in Maven when repacking the signed BouncyCastle jar file. To work around it, you can open `%USERPROFILE%\.m2\repository\org\bouncycastle\bcprov-jdk15on\1.58\bcprov-jdk15on-1.58.jar` with a zip program and remove the signature files inside its `META-INF` directory (they are not needed for iota or iri to work), then rebuild.
 
-Now it is time to build your own Snapshot. First decide how you want to split the 2 779 530 283 277 761 available IOTA to addresses, and which of them should belong to the same wallet.
+Build IRI with snapshot:
+
+    ./build_iri_with_snapshot.sh
+
+Launch IRI nodes:
+
+    ./launch_iri_nodes.sh
+
+The script would automatically launch 5 configured nodes, and connect first and last nodes as neighbors.
+Before you can connect to your iri with your wallet, you need to run the coordinator to create the first milestone
+
+    ./coordinator_milestone.sh 15010
+
+Change port 15010 with variants such as 15020, 15030, 15040, and 15050.
+
+After that you can use your wallet, log into one of your seeds, and attach addresses until you see your full balance.
+
+In case you want a new milestone, just run the coordinator again.
+
+***Have fun!***
+
+
+### Optional: Build Your Own Snapshot
+
+If you would like to adapt latest IRI or custom versions, it is necessary to build your own snapshot.
+
+First decide how you want to split the 2 779 530 283 277 761 available IOTA to addresses, and which of them should belong to the same wallet.
 
 Then start the interactive process:
 
@@ -42,14 +68,7 @@ Before you can connect to your iri with your wallet, you need to run the coordin
 
     java -jar target/iota-testnet-tools-0.1-SNAPSHOT-jar-with-dependencies.jar Coordinator localhost 14700
 
-After that you can use your wallet, log into one of your seeds, and attach addresses until you see your full balance.
-
-In case you want a new milestone, just run the coordinator again.
-
-
-***Have fun!***
-
-## Reducing PoW
+## Optional: Reducing PoW
 
 Testnet by default requires PoW for minWeightMagnitude=13. When performing larger scale tests, you might want to decrease this. To do so, you will have to
 patch iri at [two](https://github.com/iotaledger/iri/blob/6e23c046ec2232ca2031018a6bbee4abaad7d9a7/src/main/java/com/iota/iri/conf/Configuration.java#L97-L98) [places](https://github.com/iotaledger/iri/blob/64b3d723331bfdfa14ed883de447eb2363d3821b/src/main/java/com/iota/iri/TransactionValidator.java#L54-L56) and recompile it. To build the package use `mvn package -Dmaven.test.skip=true` to prevent that tests will terminate the building process; also be aware that the UDP protocol between neighbors will break as the packets are not big enough to hold the full transaction hash if the hash does not end with a sufficient amount of zeroes (so best test with only a single isolated node).
@@ -58,9 +77,9 @@ When using the official wallet, you also have to patch this. If you (like me) ha
 
 In most cases, however, it is enough to make sure you use minWeightMagnitude=13 instead of 14 and it will be "fast enough".
 
-## Signing snapshots and milestones
+## Optional: Signing snapshots and milestones
 
-iri uses Merkle-Winternitz signatures to sign snapshots and milestones, using CurlP27 and CurlP81 hash function, respectively. As the Merkle hash tree for
+IRI uses Merkle-Winternitz signatures to sign snapshots and milestones, using CurlP27 and CurlP81 hash function, respectively. As the Merkle hash tree for
 the milestons is rather large (1048576 subkeys) and generation can take a while, this project provides a way to compute partial Merkle hash trees where
 only some indices (e. g. 243000 to 243100) are filled. This makes generation much faster, while still allowing to test signature verification in real-life
 conditions.
@@ -85,5 +104,3 @@ Signing a snapshot:
 Creating a signed milestone:
 
     java -cp target/iota-testnet-tools-0.1-SNAPSHOT-jar-with-dependencies.jar iotatools.SignedCoordinator localhost 14700
-
-Always remember: With great power comes great responsibility - I do not want to see this repo end as the base of yet another Aidos Kuneen...
